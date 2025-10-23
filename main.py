@@ -69,11 +69,12 @@ def get_amazon_price(url, logger=None):
         logger: Logger pour afficher les messages de debug
     
     Returns:
-        [prix_vente, devise, prix_base, pourcentage_promo]
+        [prix_vente, devise, prix_base, pourcentage_promo, prix_plus_bas]
         - prix_vente: float, prix actuel de vente
         - devise: str, devise du prix (€, $, £, etc.)
-        - prix_base: float ou None, prix original si en promotion
+        - prix_base: float ou None, prix original si en promotion (barré)
         - pourcentage_promo: int ou None, pourcentage de réduction
+        - prix_plus_bas: float ou None, prix le plus bas récent (historique)
     """
     # Configuration du navigateur en mode headless
     chrome_options = Options()
@@ -96,18 +97,31 @@ def get_amazon_price(url, logger=None):
         driver.get(url)
         time.sleep(3)
         
+        # Récupérer uniquement la div centerCol pour éviter les données d'autres produits
+        try:
+            center_col = driver.find_element(By.ID, 'centerCol')
+            search_context = center_col
+            if logger:
+                logger.info("Zone de recherche limitée à #centerCol")
+        except Exception:
+            # Si centerCol n'existe pas, utiliser tout le document
+            search_context = driver
+            if logger:
+                logger.warning("Div #centerCol non trouvée, recherche dans toute la page")
+        
         result = {
             'current_price': None,
             'original_price': None,
             'discount': None,
+            'lowest_price': None,
         }
         
         # === MODE DEBUG: Afficher tous les prix ===
         if debug:
             logger.debug("MODE DEBUG: Recherche de tous les prix sur la page...")
             try:
-                all_price_elements = driver.find_elements(By.CSS_SELECTOR, 'span.a-offscreen')
-                logger.debug(f"Trouvé {len(all_price_elements)} éléments avec classe 'a-offscreen':")
+                all_price_elements = search_context.find_elements(By.CSS_SELECTOR, 'span.a-offscreen')
+                logger.debug(f"Trouvé {len(all_price_elements)} éléments avec classe 'a-offscreen' dans #centerCol:")
                 for idx, elem in enumerate(all_price_elements[:10], 1):
                     text = elem.text.strip()
                     if not text:
@@ -133,7 +147,7 @@ def get_amazon_price(url, logger=None):
         
         for selector_type, selector_value in current_price_selectors:
             try:
-                element = WebDriverWait(driver, 5).until(
+                element = WebDriverWait(search_context, 5).until(
                     EC.presence_of_element_located((selector_type, selector_value))
                 )
                 price_text = element.text.strip()
@@ -156,33 +170,18 @@ def get_amazon_price(url, logger=None):
         
         # === RECHERCHE DU PRIX ORIGINAL (BARRÉ) ===
         original_price_selectors = [
-            (By.CSS_SELECTOR, '.basisPrice .a-price .a-offscreen'),
-            (By.CSS_SELECTOR, 'span.basisPrice .a-price .a-offscreen'),
             (By.CSS_SELECTOR, '.basisPrice .a-price[data-a-strike="true"] .a-offscreen'),
-            (By.CSS_SELECTOR, 'span.basisPrice .a-price[data-a-strike="true"] span.a-offscreen'),
-            (By.CSS_SELECTOR, '.basisPrice span.a-offscreen'),
-            (By.CSS_SELECTOR, 'span.basisPrice span.a-offscreen'),
-            (By.CSS_SELECTOR, '.basisPrice .a-offscreen'),
-            (By.CSS_SELECTOR, 'span.a-price.a-text-price span.a-offscreen'),
-            (By.CSS_SELECTOR, '.a-text-price .a-offscreen'),
-            (By.CSS_SELECTOR, 'span[data-a-strike="true"] .a-offscreen'),
-            (By.XPATH, "//span[contains(@class, 'a-text-price')]//span[@class='a-offscreen']"),
-            (By.CSS_SELECTOR, '#corePrice_feature_div .a-text-price .a-offscreen'),
-            (By.XPATH, "//span[@class='a-price a-text-price']//span[@class='a-offscreen']"),
-            (By.CSS_SELECTOR, '.a-section.a-spacing-small span.a-price.a-text-price span.a-offscreen'),
-            (By.XPATH, "//span[contains(text(), 'Prix conseillé')]/following-sibling::span//span[@class='a-offscreen']"),
-            (By.XPATH, "//span[contains(@class, 'basisPrice')]//span[@data-a-strike='true']//span[@class='a-offscreen']"),
-            (By.XPATH, "//span[contains(@class, 'basisPrice')]//span[@class='a-offscreen']"),
+            (By.CSS_SELECTOR, 'span.basisPrice .a-price[data-a-strike="true"] span.a-offscreen')
         ]
         
         for selector_type, selector_value in original_price_selectors:
             try:
                 if selector_type == By.CSS_SELECTOR:
-                    elements = driver.find_elements(selector_type, selector_value)
+                    elements = search_context.find_elements(selector_type, selector_value)
                     if debug and elements and logger:
                         logger.debug(f"Testé: {selector_value} -> {len(elements)} élément(s) trouvé(s)")
                 else:
-                    elements = [driver.find_element(selector_type, selector_value)]
+                    elements = [search_context.find_element(selector_type, selector_value)]
                     if debug and elements and logger:
                         logger.debug(f"Testé: {selector_value} -> élément trouvé")
                 
@@ -219,16 +218,12 @@ def get_amazon_price(url, logger=None):
         # === RECHERCHE DU POURCENTAGE DE RÉDUCTION ===
         discount_selectors = [
             (By.CSS_SELECTOR, '.savingsPercentage'),
-            (By.CSS_SELECTOR, 'span.savingPriceOverride'),
-            (By.CSS_SELECTOR, '.a-badge-label'),
-            (By.XPATH, "//span[contains(text(), '%') and contains(text(), '-')]"),
-            (By.XPATH, "//span[@class='a-color-price' and contains(text(), '%')]"),
-            (By.CSS_SELECTOR, 'span.a-size-large.a-color-price'),
+            (By.CSS_SELECTOR, 'span.savingPriceOverride')
         ]
         
         for selector_type, selector_value in discount_selectors:
             try:
-                element = driver.find_element(selector_type, selector_value)
+                element = search_context.find_element(selector_type, selector_value)
                 discount_text = element.text.strip()
                 
                 if not discount_text:
@@ -250,7 +245,7 @@ def get_amazon_price(url, logger=None):
             if logger:
                 logger.warning("Réduction détectée mais prix original non trouvé. Recherche élargie...")
             try:
-                all_prices = driver.find_elements(By.CSS_SELECTOR, 'span.a-offscreen')
+                all_prices = search_context.find_elements(By.CSS_SELECTOR, 'span.a-offscreen')
                 prices_text = []
                 for p in all_prices:
                     text = p.text.strip()
@@ -289,18 +284,19 @@ def get_amazon_price(url, logger=None):
         # Convertir en valeurs numériques
         prix_vente, devise = parse_price(result['current_price'])
         prix_base, _ = parse_price(result['original_price'])
+        prix_plus_bas, _ = parse_price(result['lowest_price'])
         pourcentage_promo = parse_discount(result['discount'])
         
         # Si pas de devise détectée, utiliser € par défaut
         if not devise:
             devise = '€'
         
-        return [prix_vente, devise, prix_base, pourcentage_promo]
+        return [prix_vente, devise, prix_base, pourcentage_promo, prix_plus_bas]
             
     except Exception as e:
         if logger:
             logger.error(f"Erreur: {e}")
-        return [None, None, None, None]
+        return [None, None, None, None, None]
         
     finally:
         if driver:
@@ -325,7 +321,7 @@ def display_amazon_price(url, logger=None):
         logger.info(f"URL: {url}")
         logger.info("")
     
-    prix_vente, devise, prix_base, pourcentage_promo = get_amazon_price(url, logger)
+    prix_vente, devise, prix_base, pourcentage_promo, prix_plus_bas = get_amazon_price(url, logger)
     
     if not prix_vente:
         if logger:
@@ -353,6 +349,10 @@ def display_amazon_price(url, logger=None):
         else:
             logger.info("")
             logger.info("ℹ️  Pas de promotion détectée")
+        
+        if prix_plus_bas:
+            logger.info("")
+            logger.info(f"📉 Prix le plus bas récent: {prix_plus_bas:.2f} {devise}")
         
         logger.info("")
         logger.info("=" * 60)

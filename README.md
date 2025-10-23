@@ -14,6 +14,11 @@ Ce projet est un outil en ligne de commande permettant de récupérer les inform
 - Webdriver
 
 ## Développement en local :
+Install `virtualenv` if dosen't exist :
+```shell
+pip install virtualenv
+```
+
 ```shell
 python -m venv venv.nosync
 source venv.nosync/bin/activate
@@ -46,15 +51,14 @@ Exemples d'utilisation:
 #### Sans promotion
 ```shell
 (venv.nosync) % python ./main.py "https://www.amazon.fr/dp/B0DCBB2YTR?th=1"
-U============================================================
+============================================================
 🔍 Scraper de prix Amazon avec Selenium
 ============================================================
 URL: https://www.amazon.fr/dp/B0DCBB2YTR?th=1
 
 Chargement de la page...
+Zone de recherche limitée à #centerCol
 Prix actuel trouvé: 99
-Prix original trouvé: 74,99€ (sélecteur: .basisPrice .a-price .a-offscreen)
-Réduction trouvée: -22 %
 
 ============================================================
 📊 RÉSULTATS
@@ -76,8 +80,9 @@ Réduction trouvée: -22 %
 URL: https://www.amazon.fr/dp/B0BJQ7F16T
 
 Chargement de la page...
+Zone de recherche limitée à #centerCol
 Prix actuel trouvé: 59
-Prix original trouvé: 82,17€ (sélecteur: .basisPrice .a-price .a-offscreen)
+Prix original trouvé: 82,17€ (sélecteur: .basisPrice .a-price[data-a-strike="true"] .a-offscreen)
 Réduction trouvée: -27 %
 
 ============================================================
