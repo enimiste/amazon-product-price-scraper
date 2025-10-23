@@ -1,6 +1,8 @@
 # 🛒 Amazon Product Price Scraper (CLI)
 Ce projet est un outil en ligne de commande permettant de récupérer les informations de prix d’un produit Amazon à partir de son URL. Il extrait le prix actuel, les éventuelles promotions, ainsi que d'autres détails utiles du produit.
 
+![Schéma illustratif](schema.excalidraw.png)
+
 🔧 Fonctionnalités :
 - Récupération du prix actuel et du prix promotionnel (si disponible)
 - Extraction à partir d’une seule URL produit Amazon
@@ -14,6 +16,8 @@ Ce projet est un outil en ligne de commande permettant de récupérer les inform
 - Webdriver
 
 ## Développement en local :
+Installer le plugin Vs Code "Excalidraw".
+
 Install `virtualenv` if dosen't exist :
 ```shell
 pip install virtualenv
